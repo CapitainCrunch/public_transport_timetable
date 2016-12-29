@@ -1,36 +1,45 @@
 __author__ = 'evstrat'
 __email__ = 'evstrat.bg@gmail.com'
 
-import requests
 import re
 from model import save_to_db, Stations
-from multiprocessing import Pool
 
 url = 'http://www.proexpress.ru'
-base_url = 'http://www.proexpress.ru/stations/?gg&DorogaID=17&page='
+base_url = 'https://rasp.yandex.ru/city/213/direction?direction=msk'
 data = []
-columns = ['code', 'name', 'short_name', 'railway_type', 'railway_office', 'region', 'node']
+columns = ['code', 'name', 'railway_type']
 urls = []
 
-def station_info(url):
-    r = requests.get(url)
-    content = r.content.decode('cp1251')
-    f = re.findall('<td class="stationRowData.*?">(.*?)</td>', content)
-    f[3] = re.search('[А-я]+', f[3]).group(0)
-    res = dict(zip(columns, f))
-    print(res)
-    save_to_db(Stations, [res])
+directions = {
+              'Белорусское': 'bel',
+              'Горьковское': 'gor',
+              'Казанское': 'kaz',
+              'Киевское': 'kiv',
+              'Курское': 'kur',
+              'Ленинградское': 'len',
+              'МЦК: Московское центральное кольцо (МКЖД)': 'mkzd',
+              'Павелецкое': 'pav',
+              'Рижское': 'riz',
+              'Савёловское': 'sav',
+              'Ярославское': 'yar',
+              'Кольцевое': 'kol'
+              }
 
-for i in range(0, 631, 30):
-    r = requests.get(base_url+str(i))
-    content = r.content.decode('cp1251')
-    # codes = re.findall('<td style="text-align: center">(\d+)</td', content, re.M)
-    station_names = re.findall('<a href="(/station/\d+)/">.*?</a>', content)
-    for s in station_names:
-        urls.append(url+s)
+html_code = '<a class="b-link" href="/station/9601663?type=suburban&amp;direction=msk_bel&amp;span=schedule">Ильинское</a>'
 
 
-print('cmon pool')
 
-pool = Pool()
-results = pool.map(station_info, urls)
+def station_info(data):
+    url, direction = data
+    content = open(url, encoding='utf8').read()
+    data = re.findall('<a class="b-link" href="/station/(\d+)\?type=suburban&amp;direction=msk_....?&amp;span=schedule">(.*?)</a>', content)
+    to_save = []
+    for code, name in data:
+        if 'img' not in name:
+            to_save.append(dict(zip(columns, [code, name.replace('ё', 'е'), direction])))
+    save_to_db(Stations, to_save)
+
+for k, v in directions.items():
+    print(k + ' gogogo')
+    station_info(('pages/{}.html'.format(v), k))
+    print('ok with ' + k)

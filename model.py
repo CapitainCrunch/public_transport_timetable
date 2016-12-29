@@ -21,23 +21,32 @@ class Users(BaseModel):
     name = CharField()
     dt = DateTimeField(default=datetime.now())
 
-columns = ['Код ж/д станции', 'Наименование ж/д станции', 'Сокращенное наименование ж/д станции', 'Железная дорога', 'Отделение ж/д', 'Регион', 'Узел']
 
 class Stations(BaseModel):
     id = PrimaryKeyField()
     code = CharField(default=None)
     name = CharField(default=None)
-    short_name = CharField(default=None)
     railway_type = CharField(default=None)
-    railway_office = CharField(default=None)
-    region = CharField(default=None)
-    node = CharField(default=None)
     dt = DateTimeField(default=datetime.now())
 
 
+class LastUserChoice(BaseModel):
+    id = PrimaryKeyField()
+    code = CharField(default=None)
+    name = CharField(default=None)
+    railway_type = CharField(default=None)
+    dt = DateTimeField(default=datetime.now())
+
+
+class Favourites(BaseModel):
+    id = PrimaryKeyField()
+    user = ForeignKeyField(Users, to_field='telegram_id')
+    direction = CharField(default=None)
+    dt = DateTimeField(default=datetime.now())
+
 
 def init_db():
-    tables = [Users, Stations]
+    tables = [Users, Stations, LastUserChoice, Favourites]
     for t in tables:
         if t.table_exists():
             t.drop_table()
