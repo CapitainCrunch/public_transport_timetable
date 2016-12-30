@@ -279,7 +279,7 @@ station = ConversationHandler(
             DEL_FAV: [MessageHandler(Filters.text, delete_favourite)]},
     fallbacks=[CommandHandler('start', start)]
 )
-dp.add_handler(RegexHandler('.*', start))
 dp.add_handler(station)
+dp.add_handler(RegexHandler('.*', start))
 updater.start_polling()
 updater.idle()
