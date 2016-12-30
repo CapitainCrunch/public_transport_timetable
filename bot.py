@@ -101,7 +101,7 @@ def start(bot, update):
     username = update.message.from_user.username
     name = update.message.from_user.first_name
     uid = update.message.from_user.id
-    bot.sendMessage(uid, 'Выбери тип транспорта. Я подскажу расписание на ближайшие 3 часа',
+    bot.sendMessage(uid, 'Выбери тип транспорта. Я подскажу расписание на ближайшие 1.5 часа',
                     reply_markup=ReplyKeyboardMarkup([['Электричка']],
                                                      one_time_keyboard=True,
                                                      resize_keyboard=True))
@@ -177,7 +177,7 @@ def ask_arrival_station(bot, update):
     log(INFO, update)
     message = update.message.text.lower()
     uid = update.message.from_user.id
-    if message == 'Назад':
+    if message == 'назад':
         bot.sendMessage(uid, 'Выбери как будем искать', reply_markup=ReplyKeyboardMarkup((['Избранное'], ['Поиск'], ['Назад'])))
         return FIRST
     before_request_handler()
