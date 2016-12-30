@@ -1,4 +1,4 @@
-from telegram import ReplyKeyboardMarkup, ParseMode, ReplyKeyboardHide, KeyboardButton
+from telegram import ReplyKeyboardMarkup, ParseMode, ReplyKeyboardRemove, KeyboardButton
 from telegram.ext import Updater, CommandHandler, RegexHandler, MessageHandler, Filters, ConversationHandler
 from config import ALLTESTS, ADMIN_ID, YA_API_KEY, PTT, transport_types, GOOGLE_API_KEY
 import requests
@@ -10,6 +10,7 @@ from emoji import emojize
 from DLdistance import DLdistance
 from MySQLSelect import MySQLSelect
 import os
+from logging import log, INFO
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -79,7 +80,7 @@ def request_route(from_code, to_code):
     return msg
 
 def start(bot, update):
-    print(update)
+    log(INFO, update)
     username = update.message.from_user.username
     name = update.message.from_user.first_name
     uid = update.message.from_user.id
@@ -95,6 +96,7 @@ def start(bot, update):
 
 
 def is_from_favourites(bot, update):
+    log(INFO, update)
     uid = update.message.from_user.id
     bot.sendMessage(uid, 'Выбери как будем искать', reply_markup=ReplyKeyboardMarkup((['Избранное'], ['Поиск'], ['Назад'])))
     return FIRST
@@ -102,6 +104,7 @@ def is_from_favourites(bot, update):
 
 
 def process_favourites(bot, update):
+    log(INFO, update)
     uid = update.message.from_user.id
     message = update.message.text
     if message == '/delete':
@@ -122,13 +125,13 @@ def process_favourites(bot, update):
 
 
 def ask_departure_station(bot, update):
-    print(update)
+    log(INFO, update)
     uid = update.message.from_user.id
     message = update.message.text
     if message == 'Поиск':
         bot.sendMessage(uid, 'Введи название станции, с которой поедешь. Можно не дописывать, '
                              'например по <b>домод</b> я подскажу тебе станцию <b>Домодедово</b>',
-                        parse_mode=ParseMode.HTML, reply_markup=ReplyKeyboardHide())
+                        parse_mode=ParseMode.HTML, reply_markup=ReplyKeyboardRemove())
         return SECOND
     if message == 'Избранное':
         keyboard = []
@@ -154,7 +157,7 @@ def ask_departure_station(bot, update):
 
 
 def ask_arrival_station(bot, update):
-    print(update)
+    log(INFO, update)
     message = update.message.text.lower()
     uid = update.message.from_user.id
     before_request_handler()
@@ -194,7 +197,7 @@ def ask_arrival_station(bot, update):
 
 
 def get_route(bot, update):
-    print(update)
+    log(INFO, update)
     message = update.message.text
     uid = update.message.from_user.id
 
@@ -226,6 +229,7 @@ def get_route(bot, update):
 
 
 def add_to_favourites(bot, update):
+    log(INFO, update)
     message = update.message.text
     uid = update.message.from_user.id
     if message == 'Нет':
@@ -246,6 +250,7 @@ def add_to_favourites(bot, update):
 
 
 def delete_favourite(bot, update):
+    log(INFO, update)
     message = update.message.text
     uid = update.message.from_user.id
     from_station, to_station = message.split(emojize(':black_rightwards_arrow:'))
@@ -274,7 +279,7 @@ station = ConversationHandler(
             DEL_FAV: [MessageHandler(Filters.text, delete_favourite)]},
     fallbacks=[CommandHandler('start', start)]
 )
-
+dp.add_handler(RegexHandler('.*', start))
 dp.add_handler(station)
 updater.start_polling()
 updater.idle()
