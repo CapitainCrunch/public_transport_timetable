@@ -1,9 +1,9 @@
-from telegram import ReplyKeyboardMarkup, ParseMode, Emoji, ReplyKeyboardHide, KeyboardButton
+from telegram import ReplyKeyboardMarkup, ParseMode, ReplyKeyboardHide, KeyboardButton
 from telegram.ext import Updater, CommandHandler, RegexHandler, MessageHandler, Filters, ConversationHandler
-from config import ALLTESTS, ADMIN_ID, YA_API_KEY, PTT, transport_types, transport_types_rev, GOOGLE_API_KEY
+from config import ALLTESTS, ADMIN_ID, YA_API_KEY, PTT, transport_types, GOOGLE_API_KEY
 import requests
 import logging
-from model import Users, Stations, Favourites, save_to_db, DoesNotExist, fn, after_request_handler, before_request_handler
+from model import Users, Stations, Favourites, DoesNotExist, after_request_handler, before_request_handler
 from datetime import datetime as dt
 from datetime import timedelta
 from emoji import emojize
@@ -93,7 +93,7 @@ def start(bot, update):
 
 def is_from_favourites(bot, update):
     uid = update.message.from_user.id
-    bot.sendMessage(uid, 'Выбери как будем искать', reply_markup=ReplyKeyboardMarkup((['Избранное'], ['Поиск'], ['Назад']), one_time_keyboard=True))
+    bot.sendMessage(uid, 'Выбери как будем искать', reply_markup=ReplyKeyboardMarkup((['Избранное'], ['Поиск'], ['Назад'])))
     return FIRST
 
 
@@ -104,6 +104,9 @@ def process_favourites(bot, update):
     if message == '/delete':
         bot.sendMessage(uid, 'Выбери направление, которое хочешь удалить')
         return DEL_FAV
+    if message == 'Назад':
+        bot.sendMessage(uid, 'Выбери как будем искать', reply_markup=ReplyKeyboardMarkup((['Избранное'], ['Поиск'], ['Назад'])))
+        return FIRST
     from_station, to_station = message.split(emojize(':black_rightwards_arrow:'))
     from_code, to_code = MySQLSelect('''SELECT s_from.code, s_to.code
                             FROM stations s_from
@@ -111,7 +114,7 @@ def process_favourites(bot, update):
                               on s_from.railway_type = s_to.railway_type
                             where s_from.name = "{}" and s_to.name = "{}"'''.format(from_station.strip(), to_station.strip())).fetch_one()
     msg = request_route(from_code, to_code)
-    bot.sendMessage(uid, msg, parse_mode=ParseMode.HTML, reply_markup=ReplyKeyboardMarkup((['Избранное'], ['Поиск'], ['Назад']), one_time_keyboard=True))
+    bot.sendMessage(uid, msg, parse_mode=ParseMode.HTML, reply_markup=ReplyKeyboardMarkup((['Избранное'], ['Поиск'], ['Назад'])))
     return FIRST
 
 
@@ -122,20 +125,25 @@ def ask_departure_station(bot, update):
     if message == 'Поиск':
         bot.sendMessage(uid, 'Введи название станции, с которой поедешь. Можно не дописывать, '
                              'например по <b>домод</b> я подскажу тебе станцию <b>Домодедово</b>',
-                        parse_mode=ParseMode.HTML)
+                        parse_mode=ParseMode.HTML, reply_markup=ReplyKeyboardHide())
         return SECOND
     if message == 'Избранное':
         keyboard = []
         routes = MySQLSelect('select direction from favourites where user_id = {}'.format(uid)).fetch_all()
-        for r in routes:
-            from_code, to_code = r[0].split('|')
-            from_station = Stations.get(Stations.code == from_code)
-            to_station = Stations.get(Stations.code == to_code)
-            butt = from_station.name + ' ' + emojize(':black_rightwards_arrow:') + ' ' + to_station.name
-            keyboard.append([butt])
-        bot.sendMessage(uid, 'Выбирай из избранных, если хочешь удалить из выбранных, то нажми сюда {} /delete'.format(emojize(':black_rightwards_arrow:')),
-                        reply_markup=ReplyKeyboardMarkup(keyboard))
-        return FAV
+        if routes:
+            for r in routes:
+                from_code, to_code = r[0].split('|')
+                from_station = Stations.get(Stations.code == from_code)
+                to_station = Stations.get(Stations.code == to_code)
+                butt = from_station.name + ' ' + emojize(':black_rightwards_arrow:') + ' ' + to_station.name
+                keyboard.append([butt])
+            keyboard.append(['Назад'])
+            bot.sendMessage(uid, 'Выбирай из избранных, если хочешь удалить из выбранных, то нажми сюда {} /delete'.format(emojize(':black_rightwards_arrow:')),
+                            reply_markup=ReplyKeyboardMarkup(keyboard))
+            return FAV
+        else:
+            bot.sendMessage(uid, 'В избранных пусто', reply_markup=ReplyKeyboardMarkup((['Избранное'], ['Поиск'], ['Назад'])))
+
     if message == 'Назад':
         bot.sendMessage(uid, 'Выбери тип транспорта. Я подскажу расписание на ближайшие 3 часа',
                         reply_markup=ReplyKeyboardMarkup([['Электричка']], one_time_keyboard=True))
@@ -218,18 +226,20 @@ def add_to_favourites(bot, update):
     message = update.message.text
     uid = update.message.from_user.id
     if message == 'Нет':
-        bot.sendMessage(uid, 'Обращайся ' + emojize(':smiling_face:'))
+        bot.sendMessage(uid, 'Обращайся ' + emojize(':smiling_face:'), reply_markup=ReplyKeyboardMarkup((['Избранное'], ['Поиск'], ['Назад'])))
     if message == 'Да':
-        bot.sendMessage(uid, 'Добавил ' + emojize(':winking_face:'))
         from_station = user_data[uid]['from']['code']
         to_station = user_data[uid]['to']['code']
         direction = from_station + '|' + to_station
         try:
             before_request_handler()
             Favourites.get(Favourites.direction == direction)
+            bot.sendMessage(uid, 'Такое направление уже есть ' + emojize(':winking_face:'), reply_markup=ReplyKeyboardMarkup((['Избранное'], ['Поиск'], ['Назад'])))
         except DoesNotExist:
             Favourites.create(user=uid, direction=direction)
+            bot.sendMessage(uid, 'Добавил ' + emojize(':winking_face:'), reply_markup=ReplyKeyboardMarkup((['Избранное'], ['Поиск'], ['Назад'])))
         after_request_handler()
+    return FIRST
 
 
 def delete_favourite(bot, update):
