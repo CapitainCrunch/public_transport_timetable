@@ -3,7 +3,7 @@ from telegram.ext import Updater, CommandHandler, RegexHandler, MessageHandler, 
 from config import ALLTESTS, ADMIN_ID, YA_API_KEY, PTT, transport_types, transport_types_rev, GOOGLE_API_KEY
 import requests
 import logging
-from model import Users, Stations, Favourites, LastUserChoice, save_to_db, DoesNotExist, fn, after_request_handler, before_request_handler
+from model import Users, Stations, Favourites, save_to_db, DoesNotExist, fn, after_request_handler, before_request_handler
 from datetime import datetime as dt
 from datetime import timedelta
 from emoji import emojize
