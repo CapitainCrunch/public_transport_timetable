@@ -30,14 +30,6 @@ class Stations(BaseModel):
     dt = DateTimeField(default=datetime.now())
 
 
-class LastUserChoice(BaseModel):
-    id = PrimaryKeyField()
-    code = CharField(default=None)
-    name = CharField(default=None)
-    railway_type = CharField(default=None)
-    dt = DateTimeField(default=datetime.now())
-
-
 class Favourites(BaseModel):
     id = PrimaryKeyField()
     user = ForeignKeyField(Users, to_field='telegram_id')
@@ -46,7 +38,7 @@ class Favourites(BaseModel):
 
 
 def init_db():
-    tables = [Users, Stations, LastUserChoice, Favourites]
+    tables = [Users, Stations, Favourites]
     for t in tables:
         if t.table_exists():
             t.drop_table()
