@@ -66,21 +66,37 @@ def request_route(from_code, to_code):
                                                                                                       dt=dt.now().strftime(DATE_FORMAT))
     msg = '------------'
     r = requests.get(api_url).json()['threads']
+    count = 0
     for trains in r:
         dep_time = dt.strptime(trains['departure'], '%Y-%m-%d %H:%M:%S')
         arr_time = dt.strptime(trains['arrival'], '%Y-%m-%d %H:%M:%S')
-        if dep_time > dt.now() and dep_time < dt.now() + timedelta(hours=3):
+        if dep_time > dt.now() and dep_time < dt.now() + timedelta(hours=1.5):
             msg += '\n<i>Уходит в </i> <b>' + dep_time.strftime('%H:%M') + '</b>'
             msg += '\n<i>Приезжает в </i> <b>' + arr_time.strftime('%H:%M') + '</b>'
             msg += '\n<i>В пути примерно </i> <b>' + str(int(trains['duration'] / 60)) + '</b> минут'
             if trains['stops']:
                 msg += '\n<i>Остановки: </i><b>' + trains['stops'] + '</b>'
             msg += '\n------------'
-
+            count += 1
+    if count < 5:
+        msg = ''
+        count = 0
+        for trains in r:
+            if count == 5:
+                break
+            dep_time = dt.strptime(trains['departure'], '%Y-%m-%d %H:%M:%S')
+            arr_time = dt.strptime(trains['arrival'], '%Y-%m-%d %H:%M:%S')
+            if dep_time > dt.now() and dep_time < dt.now() + timedelta(hours=1.5):
+                msg += '\n<i>Уходит в </i> <b>' + dep_time.strftime('%H:%M') + '</b>'
+                msg += '\n<i>Приезжает в </i> <b>' + arr_time.strftime('%H:%M') + '</b>'
+                msg += '\n<i>В пути примерно </i> <b>' + str(int(trains['duration'] / 60)) + '</b> минут'
+                if trains['stops']:
+                    msg += '\n<i>Остановки: </i><b>' + trains['stops'] + '</b>'
+                msg += '\n------------'
+                count += 1
     return msg
 
 def start(bot, update):
-    log(INFO, update)
     username = update.message.from_user.username
     name = update.message.from_user.first_name
     uid = update.message.from_user.id
@@ -96,7 +112,6 @@ def start(bot, update):
 
 
 def is_from_favourites(bot, update):
-    log(INFO, update)
     uid = update.message.from_user.id
     bot.sendMessage(uid, 'Выбери как будем искать', reply_markup=ReplyKeyboardMarkup((['Избранное'], ['Поиск'], ['Назад'])))
     return FIRST
@@ -233,7 +248,7 @@ def add_to_favourites(bot, update):
     message = update.message.text
     uid = update.message.from_user.id
     if message == 'Нет':
-        bot.sendMessage(uid, 'Обращайся ' + emojize(':smiling_face:'), reply_markup=ReplyKeyboardMarkup((['Избранное'], ['Поиск'], ['Назад'])))
+        bot.sendMessage(uid, 'Обращайся ' + emojize(':winking_face:', use_aliases=True), reply_markup=ReplyKeyboardMarkup((['Избранное'], ['Поиск'], ['Назад'])))
     if message == 'Да':
         from_station = user_data[uid]['from']['code']
         to_station = user_data[uid]['to']['code']
@@ -253,6 +268,9 @@ def delete_favourite(bot, update):
     log(INFO, update)
     message = update.message.text
     uid = update.message.from_user.id
+    if message == 'Назад':
+        bot.sendMessage(uid, 'Выбери как будем искать', reply_markup=ReplyKeyboardMarkup((['Избранное'], ['Поиск'], ['Назад'])))
+        return FIRST
     from_station, to_station = message.split(emojize(':black_rightwards_arrow:'))
     from_code, to_code = MySQLSelect('''SELECT s_from.code, s_to.code
                             FROM stations s_from
@@ -267,7 +285,6 @@ def delete_favourite(bot, update):
 
 updater = Updater(PTT)
 dp = updater.dispatcher
-dp.add_handler(CommandHandler('start', start))
 
 station = ConversationHandler(
     entry_points=[RegexHandler('^Электричка$', is_from_favourites)],
@@ -280,6 +297,7 @@ station = ConversationHandler(
     fallbacks=[CommandHandler('start', start)]
 )
 dp.add_handler(station)
+dp.add_handler(CommandHandler('start', start))
 dp.add_handler(RegexHandler('.*', start))
 updater.start_polling()
 updater.idle()
