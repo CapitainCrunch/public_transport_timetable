@@ -9,9 +9,12 @@ from datetime import timedelta
 from emoji import emojize
 from DLdistance import DLdistance
 from MySQLSelect import MySQLSelect
+import os
+
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.DEBUG)
-logging.basicConfig(filename='logs.log', filemode='a', format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+logging.basicConfig(filename=BASE_DIR + '/out.log', filemode='a', format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
 
 FIRST, SECOND, THIRD, FORTH, FIFTH, FAV, DEL_FAV = range(7)
