@@ -1,26 +1,45 @@
-from telegram import ReplyKeyboardMarkup, ParseMode, ReplyKeyboardRemove, KeyboardButton
-from telegram.ext import Updater, CommandHandler, RegexHandler, MessageHandler, Filters, ConversationHandler
-from config import ALLTESTS, ADMIN_ID, YA_API_KEY, PTT, transport_types, GOOGLE_API_KEY
+import os
+import time
+from logging import log, INFO, basicConfig
 import requests
 import logging
+from telegram import ReplyKeyboardMarkup, ParseMode, ReplyKeyboardRemove, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
+from telegram.ext import Updater, CommandHandler, RegexHandler, MessageHandler, Filters, ConversationHandler, CallbackQueryHandler
+from config import ALLTESTS, YA_API_KEY, PTT, transport_types, GOOGLE_API_KEY, GOOGLE_MAPS_DIRECTIONS_API_URL, YA_GEOCODER_URL
 from model import Users, Stations, Favourites, DoesNotExist, after_request_handler, before_request_handler
 from datetime import datetime as dt
 from datetime import timedelta
 from emoji import emojize
 from DLdistance import DLdistance
 from MySQLSelect import MySQLSelect
-import os
-from logging import log, INFO
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-# logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.DEBUG)
-logging.basicConfig(filename=BASE_DIR + '/out.log', filemode='a', format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.DEBUG)
+# basicConfig(filename=BASE_DIR + '/out.log', filemode='a', format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
 
 FIRST, SECOND, THIRD, FORTH, FIFTH, FAV, DEL_FAV = range(7)
 user_data = dict()
 DATE_FORMAT = '%Y-%m-%d'
+start_keyboard = [['Электричка'], ['Маршрут']]
+reply_markup = [InlineKeyboardButton(emojize(':black_right-pointing_double_triangle:'), callback_data='next')]
+
+def do_google_request(**additional_params):
+    params = {
+        'region': 'ru',
+        'units': 'metric',
+        'key': GOOGLE_API_KEY,
+        'language': 'ru',
+        'transit_mode': 'rail',
+        'mode': 'transit'
+    }
+
+    params.update(additional_params)
+
+    r = requests.get(GOOGLE_MAPS_DIRECTIONS_API_URL, params=params)
+    resp = r.json()
+    return resp
 
 
 def make_predictions(station, **kwargs):
@@ -97,14 +116,14 @@ def request_route(from_code, to_code):
     return msg
 
 
+# ==================================== BOT PART ====================================
+
 def start(bot, update):
     username = update.message.from_user.username
     name = update.message.from_user.first_name
     uid = update.message.from_user.id
-    bot.sendMessage(uid, 'Выбери тип транспорта. Я подскажу расписание на ближайшие 1.5 часа',
-                    reply_markup=ReplyKeyboardMarkup([['Электричка']],
-                                                     one_time_keyboard=True,
-                                                     resize_keyboard=True))
+    bot.sendMessage(uid, 'Выбери тип транспорта',
+                    reply_markup=ReplyKeyboardMarkup(start_keyboard))
     try:
         before_request_handler()
         Users.get(Users.telegram_id == uid)
@@ -114,9 +133,18 @@ def start(bot, update):
     return ConversationHandler.END
 
 
-def is_from_favourites(bot, update):
+def ask_departure_point(bot, update):
+    log(INFO, update)
     uid = update.message.from_user.id
-    bot.sendMessage(uid, 'Выбери как будем искать', reply_markup=ReplyKeyboardMarkup((['Избранное'], ['Поиск'], ['Назад'])))
+    bot.sendMessage(uid, 'Откуда прокладывать маршрут? Можешь набрать адрес или отправить мне геолокацию',
+                    reply_markup=ReplyKeyboardMarkup([[KeyboardButton(text='Отправить геолокацию', request_location=True)], ['Назад']]))
+    return FIRST
+
+
+def is_from_favourites(bot, update):
+    log(INFO, update)
+    uid = update.message.from_user.id
+    bot.sendMessage(uid, 'Я подскажу расписание на ближайшие 1.5 часа. Выбери как будем искать', reply_markup=ReplyKeyboardMarkup((['Избранное'], ['Поиск'], ['Назад'])))
     return FIRST
 
 
@@ -139,6 +167,70 @@ def process_favourites(bot, update):
     msg = request_route(from_code, to_code)
     bot.sendMessage(uid, msg, parse_mode=ParseMode.HTML, reply_markup=ReplyKeyboardMarkup((['Избранное'], ['Поиск'], ['Назад'])))
     return FIRST
+
+
+def ask_arrival_point(bot, update):
+    log(INFO, update)
+    uid = update.message.from_user.id
+    message = update.message.text
+    msg = ''
+    if not message:
+        longitude = update.message.location.longitude
+        latitude = update.message.location.latitude
+        r = requests.get(YA_GEOCODER_URL, params={'geocode': '{},{}'.format(longitude, latitude),
+                                                  'format': 'json'
+                                                  })
+        arr = r.json()['response']['GeoObjectCollection']['featureMember']
+        if arr:
+            pos_name = arr[0]['GeoObject']['name']
+            message = pos_name
+            msg = 'Кажется, твой адрес <b>{}</b>.\nА куда направимся?'.format(pos_name)
+
+    else:
+        msg = 'А куда направимся?'
+
+    bot.sendMessage(uid, msg, parse_mode=ParseMode.HTML, reply_markup=ReplyKeyboardRemove())
+    user_data[uid] = {'departure_point': message}
+    return SECOND
+
+
+def get_arrival_and_route(bot, update):
+    uid = update.message.from_user.id
+    message = update.message.text
+    departure_point = user_data.get(uid).get('departure_point')
+    params = {'origin': departure_point,
+              'destination': message}
+    resp = do_google_request(**params)
+    warnings = '\n'.join(x for x in resp['routes'][0]['warnings'])
+    duration = resp['routes'][0]['legs'][0]['duration']['text']
+    msg = '{}\n\nПуть займет примерно <b>{}</b>'.format(warnings, duration)
+    all_steps = []
+    steps = resp['routes'][0]['legs'][0]['steps']
+    for step in steps:
+        arr = []
+        point = step['html_instructions']
+        dist = step['distance']['text']
+        travel_mode = step['travel_mode']
+        arr.append({'point': point,
+                    'distance': dist,
+                    'duration': duration,
+                    'travel_mode': travel_mode})
+        if step.get('steps'):
+            for s in step['steps']:
+                point = s.get('html_instructions')
+                dist = s['distance']['text']
+                duration = s['duration']['text']
+                travel_mode = s['travel_mode']
+                arr.append({'point': point,
+                            'distance': dist,
+                            'duration': duration,
+                            'travel_mode': travel_mode})
+        all_steps.extend(arr)
+
+    bot.sendMessage(uid, msg, reply_markup=InlineKeyboardMarkup([reply_markup]), parse_mode=ParseMode.HTML)
+    user_data[uid] = {'steps': all_steps,
+                      'state': -1}
+
 
 
 def ask_departure_station(bot, update):
@@ -171,7 +263,7 @@ def ask_departure_station(bot, update):
 
     if message == 'Назад':
         bot.sendMessage(uid, 'Выбери тип транспорта. Я подскажу расписание на ближайшие 3 часа',
-                        reply_markup=ReplyKeyboardMarkup([['Электричка']], one_time_keyboard=True))
+                        reply_markup=ReplyKeyboardMarkup(start_keyboard, one_time_keyboard=True))
         return ConversationHandler.END
 
 
@@ -218,7 +310,7 @@ def ask_arrival_station(bot, update):
                 emojize(':pensive_face:')))
 
 
-def get_route(bot, update):
+def get_rzd_route(bot, update):
     log(INFO, update)
     message = update.message.text
     uid = update.message.from_user.id
@@ -234,6 +326,7 @@ def get_route(bot, update):
         user_data[uid].update([('to', {'code': to_code, 'name': name})])
         msg = request_route(from_code, to_code)
         bot.sendMessage(uid, msg, parse_mode=ParseMode.HTML)
+        time.sleep(2)
         bot.sendMessage(uid, 'Добавить в избранное',
                         reply_markup=ReplyKeyboardMarkup([['Да', 'Нет']]),
                         parse_mode=ParseMode.HTML,
@@ -268,6 +361,7 @@ def add_to_favourites(bot, update):
             Favourites.create(user=uid, direction=direction)
             bot.sendMessage(uid, 'Добавил ' + emojize(':winking_face:'), reply_markup=ReplyKeyboardMarkup((['Избранное'], ['Поиск'], ['Назад'])))
         after_request_handler()
+    del user_data[uid]
     return FIRST
 
 
@@ -289,21 +383,58 @@ def delete_favourite(bot, update):
     bot.sendMessage(uid, 'Удалил', reply_markup=ReplyKeyboardMarkup((['Избранное'], ['Поиск'], ['Назад']), one_time_keyboard=True))
     return FIRST
 
+def get_next_step(bot, update):
+    query = update.callback_query
+    uid = query.from_user.id
+    text = query.data
+    if text == 'next':
+        user_data[uid]['state'] += 1
+    else:
+        user_data[uid]['state'] += 1
+    steps = user_data[uid]['steps']
+    uid_state = user_data[uid]['state']
+    if uid_state >= 0:
+        #TODO: MSG FIX AND REPLYKEYBOARD
+        new_reply_markup = reply_markup.insert(0, InlineKeyboardButton(emojize(':black_left-pointing_double_triangle:'), callback_data='previous'))
+    point = steps[uid_state]['point']
+    dist = steps[uid_state]['distance']
+    duration = steps[uid_state]['duration']
+    travel_mode = steps[uid_state]['travel_mode']
+    if travel_mode == 'WALKING':
+        msg = '<b>{}</b>\nЭто примерно <i>{}</i>, займет <i>{}</i>'.format(point, dist, duration)
+    else:
+        msg = '<b>{}</b>\nЭто займет примерно <i>{}</i>'.format(point, duration)
+    bot.sendMessage(uid, str(uid_state), parse_mode=ParseMode.HTML)
+    bot.editMessageText(text=str(uid_state), chat_id=uid, message_id=query.message.message_id,
+                        parse_mode=ParseMode.HTML,
+                        reply_markup=InlineKeyboardMarkup([new_reply_markup]))
 
-updater = Updater(PTT)
+
+
+updater = Updater(ALLTESTS)
 dp = updater.dispatcher
 
 station = ConversationHandler(
     entry_points=[RegexHandler('^Электричка$', is_from_favourites)],
     states={FIRST: [MessageHandler(Filters.text, ask_departure_station)],
             SECOND: [MessageHandler(Filters.text, ask_arrival_station)],
-            THIRD: [MessageHandler(Filters.text, get_route)],
+            THIRD: [MessageHandler(Filters.text, get_rzd_route)],
             FORTH: [RegexHandler('(Да)|(Нет)', add_to_favourites)],
             FAV: [RegexHandler('.*', process_favourites)],
             DEL_FAV: [MessageHandler(Filters.text, delete_favourite)]},
     fallbacks=[CommandHandler('start', start)]
 )
+
+route = ConversationHandler(
+    entry_points=[RegexHandler('^Маршрут', ask_departure_point)],
+    states={FIRST: [MessageHandler(Filters.text | Filters.location, ask_arrival_point)],
+            SECOND: [MessageHandler(Filters.text, get_arrival_and_route)]},
+    fallbacks=[CommandHandler('start', start)]
+)
+
 dp.add_handler(station)
+dp.add_handler(route)
+dp.add_handler(CallbackQueryHandler(get_next_step))
 dp.add_handler(CommandHandler('start', start))
 dp.add_handler(RegexHandler('.*', start))
 updater.start_polling()
