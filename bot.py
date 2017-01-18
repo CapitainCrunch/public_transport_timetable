@@ -154,8 +154,10 @@ def ask_departure_station(bot, update):
         if routes:
             for r in routes:
                 from_code, to_code = r[0].split('|')
+                before_request_handler()
                 from_station = Stations.get(Stations.code == from_code)
                 to_station = Stations.get(Stations.code == to_code)
+                after_request_handler()
                 butt = from_station.name + ' ' + emojize(':black_rightwards_arrow:') + ' ' + to_station.name
                 keyboard.append([butt])
             keyboard.append(['Назад'])
