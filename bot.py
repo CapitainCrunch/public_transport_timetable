@@ -60,8 +60,8 @@ def make_predictions(station, **kwargs):
 
 def request_route(from_code, to_code):
     api_url = 'https://api.rasp.yandex.net/v1.0/search/?apikey={api_key}&format=json&' \
-                  'from=s{from_code}&to=s{to_code}&lang=ru&transport_types=suburban&date={dt}'.format(from_code=to_code,
-                                                                                                      to_code=from_code,
+                  'from=s{from_code}&to=s{to_code}&lang=ru&transport_types=suburban&date={dt}'.format(from_code=from_code,
+                                                                                                      to_code=to_code,
                                                                                                       api_key=YA_API_KEY,
                                                                                                       dt=dt.now().strftime(DATE_FORMAT))
     msg = '------------'
@@ -96,12 +96,15 @@ def request_route(from_code, to_code):
                 count += 1
     return msg
 
+
 def start(bot, update):
     username = update.message.from_user.username
     name = update.message.from_user.first_name
     uid = update.message.from_user.id
-    bot.sendMessage(uid, 'Выбери тип транспорта. Я подскажу расписание на ближайшие 3 часа',
-                    reply_markup=ReplyKeyboardMarkup([['Электричка']], one_time_keyboard=True))
+    bot.sendMessage(uid, 'Выбери тип транспорта. Я подскажу расписание на ближайшие 1.5 часа',
+                    reply_markup=ReplyKeyboardMarkup([['Электричка']],
+                                                     one_time_keyboard=True,
+                                                     resize_keyboard=True))
     try:
         before_request_handler()
         Users.get(Users.telegram_id == uid)
@@ -115,7 +118,6 @@ def is_from_favourites(bot, update):
     uid = update.message.from_user.id
     bot.sendMessage(uid, 'Выбери как будем искать', reply_markup=ReplyKeyboardMarkup((['Избранное'], ['Поиск'], ['Назад'])))
     return FIRST
-
 
 
 def process_favourites(bot, update):
@@ -146,7 +148,7 @@ def ask_departure_station(bot, update):
     if message == 'Поиск':
         bot.sendMessage(uid, 'Введи название станции, с которой поедешь. Можно не дописывать, '
                              'например по <b>домод</b> я подскажу тебе станцию <b>Домодедово</b>',
-                        parse_mode=ParseMode.HTML, reply_markup=ReplyKeyboardRemove())
+                        parse_mode=ParseMode.HTML, reply_markup=ReplyKeyboardMarkup([['Назад']]))
         return SECOND
     if message == 'Избранное':
         keyboard = []
@@ -177,6 +179,9 @@ def ask_arrival_station(bot, update):
     log(INFO, update)
     message = update.message.text.lower()
     uid = update.message.from_user.id
+    if message == 'назад':
+        bot.sendMessage(uid, 'Выбери как будем искать', reply_markup=ReplyKeyboardMarkup((['Избранное'], ['Поиск'], ['Назад'])))
+        return FIRST
     before_request_handler()
     dep_station = MySQLSelect('select code, name, railway_type from stations where lower(name) = "{}"'.format(message)).fetch_all()
     if user_data.get(uid):
