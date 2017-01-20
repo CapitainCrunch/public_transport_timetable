@@ -320,7 +320,7 @@ if __name__ == '__main__':
     token = None
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
     if len(sys.argv) > 1:
-        token = sys.argv[1]
+        token = sys.argv[-1]
         if token.lower() == 'ptt':
             updater = Updater(PTT)
             basicConfig(filename=BASE_DIR + '/out.log', filemode='a', format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
