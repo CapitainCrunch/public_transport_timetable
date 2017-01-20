@@ -80,32 +80,50 @@ def make_predictions(station, **kwargs):
     return keyboard
 
 
-def request_route(from_code, to_code):
-    api_url = 'https://api.rasp.yandex.net/v1.0/search/?apikey={api_key}&format=json&' \
-                  'from=s{from_code}&to=s{to_code}&lang=ru&transport_types=suburban&date={dt}'.format(from_code=from_code,
-                                                                                                      to_code=to_code,
-                                                                                                      api_key=YA_API_KEY,
-                                                                                                      dt=dt.now().strftime(DATE_FORMAT))
+def compile_msg_from_request(r_json, count=None):
     msg = '------------'
-    r = requests.get(api_url).json()['threads']
-    count = 0
-    for trains in r:
+    c = 0
+    if count:
+        c = count
+    for trains in r_json['threads']:
         dep_time = dt.strptime(trains['departure'], '%Y-%m-%d %H:%M:%S')
         arr_time = dt.strptime(trains['arrival'], '%Y-%m-%d %H:%M:%S')
         lambda_time = dep_time - dt.now()
         m, s = divmod(lambda_time.seconds, 60)
         h, m = divmod(m, 60)
-        if dep_time > dt.now() and dep_time < dt.now() + timedelta(hours=1.5):
-            if h:
-                msg += '\n<i>Уходит в </i> <b>' + dep_time.strftime('%H:%M') + '</b> (через <i>{} ч {}</i> мин.)'.format(h, m)
-            else:
-                msg += '\n<i>Уходит в </i> <b>' + dep_time.strftime('%H:%M') + '</b> (через <i>{}</i> мин.)'.format(m)
-            msg += '\n<i>Приезжает в </i> <b>' + arr_time.strftime('%H:%M') + '</b>'
-            msg += '\n<i>В пути примерно </i> <b>' + str(int(trains['duration'] / 60)) + '</b> минут'
-            if trains['stops']:
-                msg += '\n<i>Остановки: </i><b>' + trains['stops'] + '</b>'
-            msg += '\n------------'
-            count += 1
+        if dep_time > dt.now():
+            if c <= 5 or dep_time < dt.now() + timedelta(hours=1.5):
+                if h:
+                    msg += '\n<i>Уходит в</i><b> ' + dep_time.strftime('%H:%M') + '</b> (через <i>{} ч {}</i> мин.)'.format(h, m)
+                else:
+                    msg += '\n<i>Уходит в</i><b> ' + dep_time.strftime('%H:%M') + '</b> (через <i>{}</i> мин.)'.format(m)
+                msg += '\n<i>Приезжает в</i><b> ' + arr_time.strftime('%H:%M') + '</b>'
+                msg += '\n<i>В пути примерно</i><b> ' + str(int(trains['duration'] / 60)) + '</b> минут'
+                if trains['stops']:
+                    msg += '\n<i>Остановки:</i><b> ' + trains['stops'] + '</b>'
+                msg += '\n------------'
+                c += 1
+
+    return (msg, c)
+
+
+def request_route(from_code, to_code):
+    params = {'apikey': YA_API_KEY,
+              'format': 'json',
+              'from': 's'+from_code,
+              'to': 's'+to_code,
+              'lang': 'ru',
+              'transport_types': 'suburban',
+              'date': dt.now().strftime(DATE_FORMAT)}
+
+    api_url = 'https://api.rasp.yandex.net/v1.0/search/'
+    r = requests.get(api_url, params=params).json()
+    msg, count = compile_msg_from_request(r)
+    if count < 5:
+        next_day = (dt.now() + timedelta(days=1)).strftime(DATE_FORMAT)
+        params.update({'date': next_day})
+        r = requests.get(api_url, params=params).json()['threads']
+        msg, count = compile_msg_from_request(r, count=count)
     return msg
 
 
@@ -312,7 +330,7 @@ def ask_arrival_station(bot, update):
                 emojize(':pensive_face:')))
 
 
-def get_rzd_route(bot, update):
+def send_rzd_route(bot, update):
     log(INFO, update)
     message = update.message.text
     uid = update.message.from_user.id
@@ -432,14 +450,14 @@ def delete_favourite(bot, update):
 
 
 
-updater = Updater(PTT)
+updater = Updater(ALLTESTS)
 dp = updater.dispatcher
 
 station = ConversationHandler(
     entry_points=[RegexHandler('^Электричка$', is_from_favourites)],
     states={FIRST: [MessageHandler(Filters.text, ask_departure_station)],
             SECOND: [MessageHandler(Filters.text, ask_arrival_station)],
-            THIRD: [MessageHandler(Filters.text, get_rzd_route)],
+            THIRD: [MessageHandler(Filters.text, send_rzd_route)],
             FORTH: [RegexHandler('(Да)|(Нет)', add_to_favourites)],
             FAV: [RegexHandler('.*', process_favourites)],
             DEL_FAV: [MessageHandler(Filters.text, delete_favourite)]},
