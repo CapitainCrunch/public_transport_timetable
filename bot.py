@@ -450,7 +450,7 @@ def delete_favourite(bot, update):
 
 
 
-updater = Updater(ALLTESTS)
+updater = Updater(PTT)
 dp = updater.dispatcher
 
 station = ConversationHandler(
