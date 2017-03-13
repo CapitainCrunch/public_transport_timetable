@@ -17,8 +17,19 @@ import sys
 FIRST, SECOND, THIRD, FORTH, FIFTH, FAV, DEL_FAV = range(7)
 user_data = dict()
 DATE_FORMAT = '%Y-%m-%d'
-# start_keyboard = [['Электричка'], ['Маршрут']]
+# start_keyboard = [['Автобус'], ['Электричка']]
 start_keyboard = [['Электричка']]
+
+
+def get_city(longitude, latitude):
+    r = requests.get(YA_GEOCODER_URL, params={'geocode': '{},{}'.format(longitude, latitude),
+                                              'format': 'json'
+                                              })
+    geo_object = r.json()['response']['GeoObjectCollection']['featureMember'][0]['GeoObject']
+    address = geo_object['metaDataProperty']['GeocoderMetaData']['Address']
+    city = [d['name'] for d in address['Components'] if d['kind'] == 'locality'][0]
+    if city:
+        return city
 
 
 def do_google_request(**additional_params):
@@ -135,6 +146,14 @@ def start(bot, update):
         Users.create(telegram_id=uid, username=username, name=name)
     after_request_handler()
     return ConversationHandler.END
+
+
+def is_from_favourites_bus(bot, update):
+    log(INFO, update)
+    uid = update.message.from_user.id
+    bot.sendMessage(uid, 'Я подскажу расписание автобуса. Выбери как будем искать',
+                    reply_markup=ReplyKeyboardMarkup((['Избранное'], ['Поиск'], ['Назад'])))
+    return FIRST
 
 
 def is_from_favourites(bot, update):
@@ -303,7 +322,8 @@ def delete_favourite(bot, update):
         bot.sendMessage(uid, 'Выбери как будем искать', reply_markup=ReplyKeyboardMarkup((['Избранное'], ['Поиск'], ['Назад'])))
         return FIRST
     from_station, to_station = message.split(emojize(':black_rightwards_arrow:'))
-    from_code, to_code = MySQLSelect('''SELECT s_from.code, s_to.code
+    from_code, to_code = MySQLSelect('''
+                            SELECT s_from.code, s_to.code
                             FROM stations s_from
                             join stations s_to
                               on s_from.railway_type = s_to.railway_type
@@ -314,6 +334,13 @@ def delete_favourite(bot, update):
     return FIRST
 
 
+def get_city(bot, update):
+    uid = update.message.from_user.id
+    message = update.message.text
+    msg = ''
+    if not message:
+        pass
+
 
 if __name__ == '__main__':
     updater = None
@@ -321,7 +348,7 @@ if __name__ == '__main__':
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
     if len(sys.argv) > 1:
         token = sys.argv[-1]
-        if token.lower() == 'ptt':
+        if token.lower() == 'prod':
             updater = Updater(PTT)
             basicConfig(filename=BASE_DIR + '/out.log', filemode='a', format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
     else:
@@ -340,7 +367,19 @@ if __name__ == '__main__':
         fallbacks=[CommandHandler('start', start)]
     )
 
+    bus = ConversationHandler(
+        entry_points=[RegexHandler('^Автобус', is_from_favourites_bus)],
+        states={FIRST: [MessageHandler(Filters.text, ask_departure_station)],
+                SECOND: [MessageHandler(Filters.text, ask_arrival_station)],
+                THIRD: [MessageHandler(Filters.text, send_rzd_route)],
+                FORTH: [RegexHandler('(Да)|(Нет)', add_to_favourites)],
+                FAV: [RegexHandler('.*', process_favourites)],
+                DEL_FAV: [MessageHandler(Filters.text, delete_favourite)]},
+        fallbacks=[CommandHandler('start', start)]
+    )
+
     dp.add_handler(station)
+    dp.add_handler(MessageHandler(Filters.location, get_city))
     dp.add_handler(CommandHandler('start', start))
     dp.add_handler(RegexHandler('.*', start))
     updater.start_polling()

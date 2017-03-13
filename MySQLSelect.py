@@ -1,22 +1,24 @@
 import pymysql
 from config import MYSQL_CONN
 
-class MySQLSelect():
+
+class MySQLSelect(object):
     def __init__(self, sql):
+        self.connection = pymysql.connect(**MYSQL_CONN)
+        self.cursor = self.connection.cursor()
         self.sql = sql
 
-    def fetch_all(self):
-        connection = pymysql.connect(**MYSQL_CONN)
-        cur = connection.cursor()
-        cur.execute(self.sql)
-        result = cur.fetchall()
-        connection.close()
-        return result
+    def execute(self):
+        self.cursor.execute(self.sql)
+        self.connection.commit()
+        self.connection.close()
 
-    def fetch_one(self):
-        connection = pymysql.connect(**MYSQL_CONN)
-        cur = connection.cursor()
-        cur.execute(self.sql)
-        connection.close()
-        result = cur.fetchone()
-        return result
+    def fetchall(self):
+        self.cursor.execute(self.sql)
+        self.connection.close()
+        return self.cursor.fetchall()
+
+    def fetchone(self):
+        self.cursor.execute(self.sql)
+        self.connection.close()
+        return self.cursor.fetchone()
