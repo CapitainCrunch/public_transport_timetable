@@ -55,10 +55,10 @@ def make_predictions(station, **kwargs):
     railway = kwargs.get('railway')
     if railway:
         sql = 'select name from stations where lower(name) like "{}%" and railway_type = "{}" order by name'
-        dep_station_like = MySQLSelect(sql.format(station, railway)).fetch_all()
+        dep_station_like = MySQLSelect(sql.format(station, railway)).fetchall()
     else:
         sql = 'select name from stations where lower(name) like "{}%" order by name'
-        dep_station_like = MySQLSelect(sql.format(station)).fetch_all()
+        dep_station_like = MySQLSelect(sql.format(station)).fetchall()
     keyboard = []
     if dep_station_like:
         for p in dep_station_like:
@@ -195,7 +195,7 @@ def ask_departure_station(bot, update):
         return SECOND
     if message == 'Избранное':
         keyboard = []
-        routes = MySQLSelect('select direction from favourites where user_id = {}'.format(uid)).fetch_all()
+        routes = MySQLSelect('select direction from favourites where user_id = {}'.format(uid)).fetchall()
         if routes:
             for r in routes:
                 from_code, to_code = r[0].split('|')
@@ -226,17 +226,17 @@ def ask_arrival_station(bot, update):
         bot.sendMessage(uid, 'Выбери как будем искать', reply_markup=ReplyKeyboardMarkup((['Избранное'], ['Поиск'], ['Назад'])))
         return FIRST
     before_request_handler()
-    dep_station = MySQLSelect('select code, name, railway_type from stations where lower(name) = "{}"'.format(message)).fetch_all()
+    dep_station = MySQLSelect('select code, name, railway_type from stations where lower(name) = "{}"'.format(message)).fetchall()
     if user_data.get(uid):
         if user_data.get(uid).get('is_second_try'):
             s, r = message.split()
-            dep_station = MySQLSelect('select code, name, railway_type from stations where lower(name) = "{}" and railway_type = "{}"'.format(s, r)).fetch_all()
+            dep_station = MySQLSelect('select code, name, railway_type from stations where lower(name) = "{}" and railway_type = "{}"'.format(s, r)).fetchall()
     after_request_handler()
     if dep_station:
         if len(dep_station) == 1:
             code, name, railway = dep_station[0]
             user_data[uid] = {'from': {'code': code, 'railway': railway, 'name': name}}
-            arr_station = MySQLSelect('select name from stations where railway_type = "{}" order by name'.format(railway)).fetch_all()
+            arr_station = MySQLSelect('select name from stations where railway_type = "{}" order by name'.format(railway)).fetchall()
             bot.sendMessage(uid, 'Ага, у тебя <b>{}</b> направление. Выбери или напиши станцию прибытия'.format(railway),
                             reply_markup=ReplyKeyboardMarkup(arr_station),
                             parse_mode=ParseMode.HTML)
@@ -354,7 +354,7 @@ if __name__ == '__main__':
     else:
         updater = Updater(ALLTESTS)
         basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.DEBUG)
-    dp = updater.dispatcher
+        dp = updater.dispatcher
 
     station = ConversationHandler(
         entry_points=[RegexHandler('^Электричка$', is_from_favourites)],
