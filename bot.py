@@ -354,8 +354,7 @@ if __name__ == '__main__':
     else:
         updater = Updater(ALLTESTS)
         basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.DEBUG)
-        dp = updater.dispatcher
-
+    dp = updater.dispatcher
     station = ConversationHandler(
         entry_points=[RegexHandler('^Электричка$', is_from_favourites)],
         states={FIRST: [MessageHandler(Filters.text, ask_departure_station)],
