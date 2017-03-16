@@ -178,7 +178,7 @@ def process_favourites(bot, update):
                             FROM stations s_from
                             join stations s_to
                               on s_from.railway_type = s_to.railway_type
-                            where s_from.name = "{}" and s_to.name = "{}"'''.format(from_station.strip(), to_station.strip())).fetch_one()
+                            where s_from.name = "{}" and s_to.name = "{}"'''.format(from_station.strip(), to_station.strip())).fetchone()
     msg = request_route(from_code, to_code)
     bot.sendMessage(uid, msg, parse_mode=ParseMode.HTML, reply_markup=ReplyKeyboardMarkup((['Избранное'], ['Поиск'], ['Назад'])))
     return FIRST
@@ -269,7 +269,7 @@ def send_rzd_route(bot, update):
     from_code = user_data[uid]['from']['code']
     railway = user_data[uid]['from']['railway']
 
-    arr_station = MySQLSelect('select code, name from stations where name = "{}" and railway_type = "{}"'.format(message, railway)).fetch_one()
+    arr_station = MySQLSelect('select code, name from stations where name = "{}" and railway_type = "{}"'.format(message, railway)).fetchone()
     if arr_station:
         to_code, name = arr_station
         user_data[uid].update([('to', {'code': to_code, 'name': name})])
@@ -327,7 +327,7 @@ def delete_favourite(bot, update):
                             FROM stations s_from
                             join stations s_to
                               on s_from.railway_type = s_to.railway_type
-                            where s_from.name = "{}" and s_to.name = "{}"'''.format(from_station.strip(), to_station.strip())).fetch_one()
+                            where s_from.name = "{}" and s_to.name = "{}"'''.format(from_station.strip(), to_station.strip())).fetchone()
     s = from_code + '|' + to_code
     Favourites.delete().where(Favourites.direction == s).execute()
     bot.sendMessage(uid, 'Удалил', reply_markup=ReplyKeyboardMarkup((['Избранное'], ['Поиск'], ['Назад']), one_time_keyboard=True))
