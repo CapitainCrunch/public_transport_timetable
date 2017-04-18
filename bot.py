@@ -191,7 +191,8 @@ def ask_departure_station(bot, update):
     if message == 'Поиск':
         bot.sendMessage(uid, 'Введи название станции, с которой поедешь. Можно не дописывать, '
                              'например по <b>домод</b> я подскажу тебе станцию <b>Домодедово</b>',
-                        parse_mode=ParseMode.HTML, reply_markup=ReplyKeyboardMarkup([['Назад']]))
+                        parse_mode=ParseMode.HTML, reply_markup=ReplyKeyboardMarkup([['Назад']],
+                                                                                    resize_keyboard=1))
         return SECOND
     if message == 'Избранное':
         keyboard = []
